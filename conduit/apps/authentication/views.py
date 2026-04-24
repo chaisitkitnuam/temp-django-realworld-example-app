@@ -1,4 +1,6 @@
-from rest_framework import status
+import logging
+
+from rest_framework import exceptions, status
 from rest_framework.generics import RetrieveUpdateAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -8,6 +10,8 @@ from .renderers import UserJSONRenderer
 from .serializers import (
     LoginSerializer, RegistrationSerializer, UserSerializer
 )
+
+logger = logging.getLogger(__name__)
 
 
 class RegistrationAPIView(APIView):
@@ -36,13 +40,25 @@ class LoginAPIView(APIView):
 
     def post(self, request):
         user = request.data.get('user', {})
+        email = user.get('email')
+        client_ip = request.META.get('REMOTE_ADDR')
+
+        logger.info("Login attempt for email=%s from ip=%s", email, client_ip)
 
         # Notice here that we do not call `serializer.save()` like we did for
         # the registration endpoint. This is because we don't actually have
         # anything to save. Instead, the `validate` method on our serializer
         # handles everything we need.
         serializer = self.serializer_class(data=user)
-        serializer.is_valid(raise_exception=True)
+        try:
+            serializer.is_valid(raise_exception=True)
+        except exceptions.APIException:
+            logger.warning(
+                "Login failed for email=%s from ip=%s", email, client_ip
+            )
+            raise
+
+        logger.info("Login succeeded for email=%s from ip=%s", email, client_ip)
 
         return Response(serializer.data, status=status.HTTP_200_OK)
 
